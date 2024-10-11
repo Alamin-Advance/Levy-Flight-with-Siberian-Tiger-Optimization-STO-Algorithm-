@@ -1,6 +1,6 @@
 # Levy Flight with Siberian Tiger Optimization (STO) Algorithm
 
-This repository contains the implementation of the **Levy-Flight-enhanced Siberian Tiger Optimization (STO) Algorithm, designed to tackle complex optimization problems. By integrating various Levy Flight (LF) strategies, this algorithm aims to enhance the balance between exploration and exploitation, and it has been benchmarked using CEC 2017 test functions.
+This repository contains the implementation of the Levy-Flight-enhanced Siberian Tiger Optimization (STO) Algorithm, designed to tackle complex optimization problems. By integrating various Levy Flight (LF) strategies, this algorithm aims to enhance the balance between exploration and exploitation, and it has been benchmarked using CEC 2017 test functions.
 
 ## Overview
 
