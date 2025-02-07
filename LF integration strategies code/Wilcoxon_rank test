@@ -1,0 +1,50 @@
+import pandas as pd
+from scipy.stats import wilcoxon
+
+# Read the CSV file into a DataFrame, skipping the first row
+df = pd.read_csv('/content/drive/My Drive/Colab Notebooks/results.csv')
+
+# Set the 'Function' column as the index
+df.set_index('Function', inplace=True)
+
+# Define the strategies to compare STO with
+strategies_to_compare = ['LFSTO-rand0.5', 'LFSTO-direct', 'LFSTO-rand0.5-step0.1', 'LFSTO-trail', 'LFSTO-trap']
+
+# Convert numeric columns to numeric data type
+numeric_columns = df.columns.drop('metrics')
+df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric, errors='coerce')
+
+# Initialize lists to store results
+compared_algorithms = []
+statistics = []
+p_values = []
+significance = []
+
+# Perform pairwise Wilcoxon rank test for each comparison
+for strategy in strategies_to_compare:
+    # Skip comparing LFSTO-rand0.5 with itself
+    if strategy == 'STO':
+        continue
+
+    # Perform Wilcoxon rank test
+    statistic, p_value = wilcoxon(df.loc[:, 'STO'], df.loc[:, strategy])
+
+    # Determine significance
+    sig = "Yes" if p_value < 0.05 else "No"
+
+    # Store results
+    compared_algorithms.append(f" STO vs {strategy}")
+    statistics.append(statistic)
+    p_values.append(p_value)
+    significance.append(sig)
+
+# Create DataFrame to display results
+results_df = pd.DataFrame({
+    "compared algorithm": compared_algorithms,
+    "statistics": statistics,
+    "p-value": p_values,
+    "significance": significance
+})
+
+# Display results
+print(results_df)
