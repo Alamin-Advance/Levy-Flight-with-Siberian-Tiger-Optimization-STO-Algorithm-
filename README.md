@@ -120,7 +120,6 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 
 ---
 
-Let me know if you need further customization or additional sections! 🚀
 ## Contact
 
 For any questions or further information, please reach out or open an issue.
