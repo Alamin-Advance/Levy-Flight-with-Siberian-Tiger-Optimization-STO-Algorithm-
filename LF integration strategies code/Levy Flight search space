@@ -1,0 +1,39 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+def levy_flight(mu, c):
+    u = np.random.uniform(0, 1)
+    v = np.random.normal(mu, c)
+    step = 1 / (u ** (1 / v))
+    return step
+
+# Parameters for the Lévy flight distribution
+mu = 1.5  # Mean step length
+c = 0.1   # Scale parameter
+
+# Number of steps in the flight
+num_steps = 500  # Changed to 500 steps
+
+# Initialize starting point
+x = [0]
+y = [0]
+
+# Generate the Lévy flight
+for _ in range(num_steps):
+    step = levy_flight(mu, c)
+    angle = np.random.uniform(0, 2 * np.pi)
+    new_x = x[-1] + step * np.cos(angle)
+    new_y = y[-1] + step * np.sin(angle)
+    x.append(new_x)
+    y.append(new_y)
+
+# Plot the Lévy flight
+plt.figure(figsize=(10, 6))
+plt.plot(x, y, marker='o', linestyle='-', color='b', label='Flight Path')
+plt.scatter(x[0], y[0], color='green', marker='o', s=100, label='Start')
+plt.scatter(x[-1], y[-1], color='red', marker='o', s=100, label='End')
+plt.xlabel('X-axis')
+plt.ylabel('Y-axis')
+plt.title('Lévy Flight', fontsize=14, fontname="Times New Roman")
+plt.legend()
+plt.show()
