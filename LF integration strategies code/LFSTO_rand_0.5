@@ -1,0 +1,335 @@
+import numpy as np
+import math
+import time
+from tabulate import tabulate
+import os
+import sys
+import pickle
+from typing import Optional
+import matplotlib.pyplot as plt
+import csv
+
+
+# Content from transforms.py
+
+file_path = '/content/drive/My Drive/Colab Notebooks/data.pkl'
+with open(file_path, 'rb') as _pkl_file:
+    _pkl = pickle.load(_pkl_file)
+
+rotations = {
+    2: _pkl['M_D2'],
+    10: _pkl['M_D10'],
+    20: _pkl['M_D20'],
+    30: _pkl['M_D30'],
+    50: _pkl['M_D50'],
+    100: _pkl['M_D100']
+
+}
+
+rotations_cf = {
+    2: _pkl['M_cf_d2'],
+    10: _pkl['M_cf_D10'],
+    20: _pkl['M_cf_D20'],
+    30: _pkl['M_cf_D30'],
+    50: _pkl['M_cf_D50'],
+    100: _pkl['M_cf_D100']
+
+}
+
+# Shape (20, 100)
+# Contains 100-dimension shift vectors for functions f1 to f20
+shifts = _pkl['shift']
+
+# Shape (10, 10, 100)
+# Contains 10 100-dimension shift vectors for functions f21 to f30
+shifts_cf = _pkl['shift_cf']
+
+# Each has shape (10, N) containing N-dimensional permutations for functions f11
+# to f20 (note: the original were 1-indexed, these are 0-indexed)
+shuffles = {
+    10: _pkl['shuffle_D10'],
+    30: _pkl['shuffle_D30'],
+    50: _pkl['shuffle_D50'],
+    100: _pkl['shuffle_D100']
+}
+
+# Each has shape (2, 10, N) containing 10 N-dimensional permutations for
+# functions f29 and f30 (note: the original were 1-indexed, these are 0-indexed)
+shuffles_cf = {
+    10: _pkl['shuffle_cf_D10'],
+    30: _pkl['shuffle_cf_D30'],
+    50: _pkl['shuffle_cf_D50'],
+    100: _pkl['shuffle_cf_D100']
+}
+
+def shift_rotate(x: np.ndarray, shift: np.ndarray, rotation: np.ndarray) -> np.ndarray:
+    shifted = np.expand_dims(x - np.expand_dims(shift, 0), -1)
+    x_transformed = np.matmul(np.expand_dims(rotation, 0), shifted)
+    return x_transformed[:, :, 0]
+
+def shuffle_and_partition(x, shuffle, partitions):
+    nx = x.shape[1]
+    xs = np.zeros_like(x)
+    for i in range(0, nx):
+        xs[:, i] = x[:, shuffle[i]]
+    parts = []
+    start, end = 0, 0
+    for p in partitions[:-1]:
+        end = start + int(np.ceil(p * nx))
+        parts.append(xs[:, start:end])
+        start = end
+    parts.append(xs[:, end:])
+    return parts
+
+# Content from basic.py
+
+def bent_cigar(x: np.ndarray) -> np.ndarray:
+    sm = np.sum(x[:, 1:] * x[:, 1:], axis=1)
+    sm = sm * 10e6
+    return x[:, 0]*x[:, 0] + sm
+
+def sum_diff_pow(x: np.ndarray) -> np.ndarray:
+    i = np.expand_dims(np.arange(x.shape[1]) + 1, 0)
+    x_pow = np.power(np.abs(x), i)
+    return np.sum(x_pow, axis=1)
+
+def zakharov(x: np.ndarray) -> np.ndarray:
+    # NOTE: the i+1 term is not in the CEC function definitions, but is in the
+    # code and in any definition you find online
+    i = np.expand_dims(np.arange(x.shape[1]) + 1, 0)
+    sm = np.sum(i * x, axis=1)
+    sms = np.sum(x * x, axis=1)
+    sm = 0.5 * sm
+    sm = sm * sm
+    return sms + sm + (sm * sm)
+
+
+def initialize_population(N, num_variables, lb, ub):
+    return lb + (ub - lb) * np.random.rand(N, num_variables)
+
+def evaluate_objective(population, objective_function):
+    return np.array([objective_function(x) for x in population])
+
+def greedy_selection(new_sol, sol, fitness, objective_function):
+    new_fitness = objective_function(new_sol)
+    return (
+        new_sol if new_fitness < fitness else sol,
+        new_fitness if new_fitness < fitness else fitness
+    )
+
+def levy_flight(dim, step_size):
+    beta = 1.5  # You can experiment with different values for beta
+    sigma = (np.math.gamma(1 + beta) * np.sin(np.pi * beta / 2) / (np.math.gamma((1 + beta) / 2) * beta * 2 ** ((beta - 1) / 2))) ** (1 / beta)
+    u = np.random.normal(0, sigma, dim)
+    v = np.random.normal(0, 1, dim)
+    step = u / (abs(v) ** (1 / beta))
+    return step_size * step
+
+def sto_algorithm_single(N, MFEs, lb, ub, objective_function):
+    num_variables = len(lb)
+    T = (MFEs - N) // (4 * N)
+    best_solutions = []
+    best_fitness_values = []
+    execution_time = 0
+    best_solution = float('inf')
+    worst_solution = float('-inf')
+
+    total_runs = 30
+    iterations_per_run = T   # Calculate iterations per run
+    for _ in range(total_runs):
+        start_time = time.time()
+
+        population = initialize_population(N, num_variables, lb, ub)
+        fitness = evaluate_objective(population, objective_function)
+        step_size = 0.01  # Initial step size for Levy flight
+        fitness_values_per_iteration = []
+        #step_size = 0.1  # Initial step size for Levy flight
+
+        for t in range(iterations_per_run):
+            for i in range(N):
+                # Phase 1: Prey hunting
+                Xbest = population[np.argmin(fitness)]
+                PP = population[np.where(fitness < fitness[i])]
+                if len(PP) == 0:
+                    PP = np.append(PP, Xbest)
+                TP = PP[np.random.randint(len(PP))]
+                l = np.random.randint(1, 2, size=(1, num_variables))
+                #r = np.random.uniform(0, 1, num_variables)
+                r = np.random.random(num_variables)
+                levy_steps = levy_flight(dim, step_size)
+
+                if np.random.rand() < 0.5:  # Apply Levy flight with a probability
+                    P1S1 = (population[i] +  r * (TP - l * Xbest))[0] * levy_steps
+                    population[i] = np.clip(population[i], lb, ub)
+                    population[i], fitness[i] = greedy_selection(P1S1, population[i], fitness[i], objective_function)
+                else:
+                    P1S1 = (population[i] + r * (TP - l * Xbest))[0]
+                    population[i], fitness[i] = greedy_selection(P1S1, population[i], fitness[i], objective_function)
+
+                r = np.random.random(num_variables)
+                if np.random.rand() < 0.5:
+                    P1S2 = population[i] + ( r * (ub - lb)) / (t + 1) * levy_steps
+                    # Ensure solutions stay within bounds
+                    population[i] = np.clip(population[i], lb, ub)
+                    population[i], fitness[i] = greedy_selection(P1S2, population[i], fitness[i], objective_function)
+                else:
+                    P1S2 = population[i] + (r * (ub - lb)) / (t + 1)
+                    population[i], fitness[i] = greedy_selection(P1S2, population[i], fitness[i], objective_function)
+
+                # Phase 2: Fighting with bear
+                k = i
+                while i == k:
+                    k = np.random.randint(0, N)
+
+                r = np.random.uniform(0, 1, num_variables)
+                if fitness[k] < fitness[i]:
+                    P2S1 = population[i] +  r * (population[k] - l * population[i])
+                else:
+                    P2S1 = population[i] +  r * (population[i] - l * population[k])
+                population[i], fitness[i] = greedy_selection(P2S1, population[i], fitness[i], objective_function)
+
+                TPi = np.random.uniform(0, 1, num_variables)
+                P2S2 = population[i] + ( r * (ub - lb)) / (t + 1)
+                population[i], fitness[i] = greedy_selection(P2S2, population[i], fitness[i], objective_function)
+                fitness_per_iteration = []
+
+                # Adjust step size for Levy flight (optional)
+            step_size *= (t+1)/T  # You can experiment with different decay rates
+            if t <= T:
+                  fitness_values_per_iteration.append(np.min(fitness))
+
+        best_solutions.append(population[np.argmin(fitness)])
+        best_solution = np.min(fitness_values_per_iteration)
+        worst_solution = np.max(fitness_values_per_iteration)
+        mean_fitness = np.mean(fitness_values_per_iteration)
+        std_deviation = np.std(fitness_values_per_iteration)
+        median_fitness = np.median(fitness_values_per_iteration)
+
+        end_time = time.time()
+        execution_time += end_time - start_time
+
+    return best_solutions, best_fitness_values, execution_time, best_solution, worst_solution, mean_fitness, std_deviation, median_fitness, fitness_values_per_iteration
+
+def sto_algorithm(N, MFEs, lb, ub, objective_functions):
+    results = []
+
+    for func in objective_functions:
+        best_solutions, best_fitness_values, execution_time, best_solution, worst_solution, mean_fitness, std_deviation, median_fitness, fitness_values_per_iteration = sto_algorithm_single(N, MFEs, lb, ub, func)
+
+        results.append({
+            "Function": func.__name__,
+            "Best Solution": best_solution,
+            "Worst Solution": worst_solution,
+            "Mean Fitness": mean_fitness,
+            "Standard Deviation": std_deviation,
+            "Median Fitness": median_fitness,
+            "Execution Time": execution_time,
+            "fitness_values_per_iteration": fitness_values_per_iteration
+        })
+
+    return results
+
+
+# objective functions of CEC2011
+
+'''Unimodal Functions:'''
+def f1(x, rotation=None, shift=None):
+    x = np.atleast_2d(x)
+    x = np.array(x)
+    nx = x.shape[1]
+    if rotation is None:
+        rotation = rotations[nx][0]
+    if shift is None:
+        shift = shifts[0][:nx]
+    x_transformed = shift_rotate(x, shift, rotation)
+    return bent_cigar(x_transformed) + 100.0
+
+
+# Define the list of objective functions
+objective_functions = [ f1 ]
+
+
+N = 30
+dim = 10
+lb = np.array([-100.0] * dim)
+ub = np.array([100.0] * dim)
+num_variables = len(lb)
+MFEs = 10000 * num_variables
+
+
+results = sto_algorithm(N, MFEs, lb, ub, objective_functions)
+
+# Display results in tabular form
+headers = ["Function", "Best Solution", "Worst Solution", "Mean Fitness", "Standard Deviation", "Median Fitness", "Execution Time"]
+table_data = [[
+    result["Function"],
+    f"{result['Best Solution']:.4E}",
+    f"{result['Worst Solution']:.4E}",
+    f"{result['Mean Fitness']:.4E}",
+    f"{result['Standard Deviation']:.4E}",
+    f"{result['Median Fitness']:.4E}",
+    f"{result['Execution Time']:.4E}",
+] for result in results]
+
+print("Standard STO algorithm for CEC2011(f1-f10) benchmark test function")
+print(tabulate(table_data, headers=headers, tablefmt="grid", floatfmt=(".4E", ".4E", ".4E", ".4E", ".4E", ".4E", ".4E")))
+
+# Display fitness values for each iteration in tabular form
+headers_fitness = ["Function", "Iteration", "Best Fitness"]
+table_data_fitness = []
+for result in results:
+    fitness_values = result['fitness_values_per_iteration']
+    for i, fitness_iter in enumerate(fitness_values):
+        best_fitness = np.min(fitness_iter)
+        if isinstance(best_fitness, np.ndarray):
+            best_fitness = best_fitness.item()
+        table_data_fitness.append([
+            result["Function"],
+            f"Iteration {i+1}",
+            f"{best_fitness}"
+        ])
+
+print("\nBest Fitness Value for Each Iteration")
+print(tabulate(table_data_fitness, headers=headers_fitness, tablefmt="grid", floatfmt=".4E"))
+
+
+# Assuming you've generated table_data_fitness as in your previous code
+
+# Create a dictionary to store fitness values for each iteration of each function
+fitness_data = {}
+for row in table_data_fitness:
+    func_name, iteration, fitness = row
+    iteration_num = int(iteration.split()[1])  # Extracting the iteration number
+    if func_name not in fitness_data:
+        fitness_data[func_name] = {"Iterations": [], "Fitness Values": []}
+    fitness_data[func_name]["Iterations"].append(iteration_num)
+    fitness_data[func_name]["Fitness Values"].append(float(fitness))
+
+# Plotting the graph
+plt.figure(figsize=(6, 3))
+for func_name, data in fitness_data.items():
+    plt.plot(data["Iterations"], data["Fitness Values"], label=func_name)
+
+plt.xlabel('Iterations')
+plt.ylabel('Fitness Function')
+plt.title('Convergence of f1')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Save fitness data to CSV files
+def save_fitness_data_to_csv(func_name, data):
+    directory = '/content/drive/My Drive/Colab Notebooks/data_files/lfsto_rand'  # Change this path as needed
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+    filepath = os.path.join(directory, f'{func_name}_lfsto_rand_dim10_data.csv')
+    with open(filepath, 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(['Iteration', 'Fitness Value'])
+        for iteration, fitness_value in zip(data["Iterations"], data["Fitness Values"]):
+            writer.writerow([iteration, fitness_value])  # Writing fitness values as individual integers or floats
+
+# Save fitness data for each function
+for func_name, data in fitness_data.items():
+    save_fitness_data_to_csv(func_name, data)
