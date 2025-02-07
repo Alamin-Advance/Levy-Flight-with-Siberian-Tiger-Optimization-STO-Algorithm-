@@ -90,7 +90,7 @@ levy-flight-sto/
   ![Convergence Plot](Graphs/)
 
 - **Search Space Exploration**:
-  ![Search Space](Graphs/LF_search_space.png)
+  ![Search Space](Graphs/)
 
 ---
 
