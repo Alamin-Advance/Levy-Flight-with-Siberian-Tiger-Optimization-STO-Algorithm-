@@ -1,0 +1,54 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Load CSV files into Pandas DataFrames
+sto_df = pd.read_csv("/content/drive/My Drive/Colab Notebooks/data_im10_data.csv")
+lfsto_direct_df = pd.read_csv("/content/drive/My Drive/Colab Notebooks/data_dim10_data.csv")
+lfsto_rand_df = pd.read_csv("/content/drive/My Drive/Colab Notebooks/data/to_rand_dim10_data.csv")
+lfsto_rand_step_df = pd.read_csv("/content/drive/My Drive/Colab Notebooks/data_/f1_lfsto_rand_step0.1_dim10_data.csv")
+lfsto_trail_df = pd.read_csv("/content/drive/My Drive/Colab Notebooks/data_f1_lfsto_trail_dim10_data.csv")
+lfsto_trap_df = pd.read_csv("/content/drive/My Drive/Colab Notebooks/data_dim10_data.csv")
+
+# Plot convergence graph
+plt.figure(figsize=(6, 3))  # Adjust figure size if necessary
+
+# Plot each optimization method
+plt.plot(sto_df['Iteration'], sto_df['Fitness Value'], label='sto')
+plt.plot(lfsto_direct_df['Iteration'], lfsto_direct_df['Fitness Value'], label='lfsto-direct')
+plt.plot(lfsto_rand_df['Iteration'], lfsto_rand_df['Fitness Value'], label='lfsto-randpro')
+plt.plot(lfsto_rand_step_df['Iteration'], lfsto_rand_step_df['Fitness Value'], label='lfsto-randprob(step_size=0.1)')
+plt.plot(lfsto_trail_df['Iteration'], lfsto_trail_df['Fitness Value'], label='lfsto-trial')
+plt.plot(lfsto_trap_df['Iteration'], lfsto_trap_df['Fitness Value'], label='lfsto-trap')
+
+# Add labels and legend
+plt.xlabel('Iteration', fontsize=8)
+plt.ylabel('Fitness value', fontsize=8)
+plt.title('Function 1', fontsize=8)
+plt.legend(fontsize=8, loc='upper right', bbox_to_anchor=(1.00, 1.00), ncol=2, facecolor='lightgrey', edgecolor='black')
+
+# Set x-axis tick locations at intervals of 100 iterations
+plt.xticks(range(0, 850, 100), color='green')
+
+# Set y-axis limits for different datasets
+plt.ylim(0, 1e11)  # Adjust the y-axis limit for function 1
+# For function 3, change 4000000 to the appropriate maximum value
+# For function 4, change 2500 to the appropriate maximum value
+# For function 5, change 675 to the appropriate maximum value
+
+# Zoomed-in view for the first 100 iterations
+plt.axes([0.20, 0.20, 0.4, 0.45])  # Adjust the position and size of the zoomed-in view
+plt.plot(sto_df['Iteration'][:101], sto_df['Fitness Value'][:101], label='sto')
+plt.plot(lfsto_direct_df['Iteration'][:101], lfsto_direct_df['Fitness Value'][:101], label='lfsto_direct')
+plt.plot(lfsto_rand_df['Iteration'][:101], lfsto_rand_df['Fitness Value'][:101], label='lfsto_rand')
+plt.plot(lfsto_rand_step_df['Iteration'][:101], lfsto_rand_step_df['Fitness Value'][:101], label='lfsto_rand_step0.1')
+plt.plot(lfsto_trail_df['Iteration'][:101], lfsto_trail_df['Fitness Value'][:101], label='lfsto_trail')
+plt.plot(lfsto_trap_df['Iteration'][:101], lfsto_trap_df['Fitness Value'][:101], label='lfsto_trap')
+plt.xticks(range(0, 101, 100))
+plt.yticks([])  # Hide y-axis labels
+
+# Add title for the zoomed-in view within the plot
+plt.text(50, max(sto_df['Fitness Value'][:101]) - 0.1 * (max(sto_df['Fitness Value'][:101]) - min(sto_df['Fitness Value'][:101])), 'Zoomed-in View (First 100 Iterations)', fontsize=7, ha='center')
+
+# Display or save the plot
+plt.grid(True)  # Add grid for better readability
+plt.show()
