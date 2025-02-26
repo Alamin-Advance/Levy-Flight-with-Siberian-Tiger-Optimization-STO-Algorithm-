@@ -91,8 +91,7 @@ levy-flight-sto/
 
 - **Search Space Exploration**:
   ![Search Space](Graphs/)
-- **Search Space Exploration**:
-  ![Search Space](https://drive.google.com/drive/folders/1kx4PTXpm5S2REtQACf5iZSqC1ZBkpOwh)
+
 ---
 
 ## Contributing
